@@ -1,0 +1,204 @@
+================================================================================
+FDA TERMS - QUICK REFERENCE FOR FRAUD DETECTION
+================================================================================
+
+CORE FDA PIPELINE
+-----------------
+
+1. RAW DATA → FUNCTIONAL DATA
+   Week 0  Week 1  Week 2  ...  Week 52
+   $100    $120    $500    ...  $115
+      ↓ B-spline smoothing (λ=10)
+   f(t) = smooth continuous curve
+
+
+2. EXTRACT FDA FEATURES
+   
+   a) CURVE VALUES: f(t₀), f(t₁), ..., f(t₅₂)
+      → 52 time points (too many!)
+   
+   b) FIRST DERIVATIVE: f'(t) = velocity
+      → How fast spending changes
+      → High |f'(t)| = sudden change = potential fraud
+   
+   c) SECOND DERIVATIVE: f''(t) = acceleration  
+      → How velocity changes
+      → High |f''(t)| = pattern change = fraud alert
+
+
+3. DIMENSION REDUCTION via FPCA
+   
+   52 time points → 10 Principal Components
+   
+   PC1: Overall spending level    (70% variance)
+   PC2: Trend (up/down)          (15% variance)
+   PC3: Volatility                (8% variance)
+   PC4-10: Specific patterns      (7% variance)
+   
+   RESULT: 10 uncorrelated features per functional variable
+
+
+4. MULTIPLE FUNCTIONAL VARIABLES
+
+   Amount Curve:      f_amt(t)    → 10 PCs
+   Count Curve:       f_count(t)  → 10 PCs
+   Velocity Curve:    f'_amt(t)   → 10 PCs
+                                  --------
+                      TOTAL: 30 FDA features
+
+
+5. COMBINE WITH SCALARS
+
+   [30 FDA features] + [40 scalar features] = 70 total features
+                              ↓
+                    Ensemble Models (RF + GLM)
+                              ↓
+                      Fraud Prediction
+
+
+KEY FDA CONCEPTS
+----------------
+
+CONCEPT 1: Basis Expansion
+   f(t) = c₁B₁(t) + c₂B₂(t) + ... + c₁₅B₁₅(t)
+   
+   Bᵢ(t) = basis functions (B-splines)
+   cᵢ = coefficients (fitted from data)
+
+
+CONCEPT 2: Smoothing Parameter (λ)
+   Balance between fit and smoothness
+   
+   λ = 0.01  → Rough (overfits noise)
+   λ = 10    → Smooth (captures pattern) ← OUR CHOICE
+   λ = 100   → Too smooth (underfits)
+
+
+CONCEPT 3: Functional PCA
+   Like regular PCA but for functions
+   
+   Instead of: X₁, X₂, ..., X₅₂ → PC1, PC2, ...
+   We have:    f(t) entire curve → ξ₁, ξ₂, ... (FPC scores)
+   
+   These FPC scores ARE our FDA features!
+
+
+CONCEPT 4: Derivatives
+   Mathematical: df/dt = lim[h→0] (f(t+h) - f(t))/h
+   
+   Practical interpretation:
+   f'(t) > 0   → Spending increasing
+   f'(t) < 0   → Spending decreasing  
+   |f'(t)| big → Rapid change → FRAUD SIGNAL
+
+
+FDA vs TRADITIONAL
+------------------
+
+TRADITIONAL APPROACH:
+   Features: week1, week2, ..., week52
+   • 52 correlated features
+   • No smooth structure
+   • Ignores continuity
+   • Misses rate of change
+
+FDA APPROACH:
+   Features: PC1, ..., PC10, PC'1, ..., PC'10
+   • 30 uncorrelated features
+   • Smooth curves
+   • Exploits temporal structure  
+   • Captures velocity/acceleration
+   • Better for fraud detection!
+
+
+HOW FDA DETECTS FRAUD
+---------------------
+
+NORMAL CARD:
+   Curve:   ————————————————  (smooth, predictable)
+   f'(t):   ≈ 0              (stable spending)
+   f''(t):  ≈ 0              (consistent pattern)
+   FPCs:    Small values     (typical behavior)
+   
+   → Low fraud probability
+
+
+FRAUD CARD:
+   Curve:   ————⎺⎺⎺⎺⎺————    (sudden spike)
+   f'(t):   ↑↑↑↓↓↓           (rapid change)  
+   f''(t):  ⎺⎺⎺⎺⎺            (extreme acceleration)
+   FPCs:    Large values     (abnormal pattern)
+   
+   → High fraud probability
+
+
+IMPLEMENTATION IN CODE
+----------------------
+
+# Step 1: Create functional data
+basis <- create.bspline.basis(rangeval=c(0,52), nbasis=15)
+fdPar <- fdPar(basis, Lfdobj=2, lambda=10)
+fd_obj <- smooth.basis(weeks, amounts, fdPar)$fd
+
+# Step 2: Get derivatives
+velocity <- eval.fd(grid, fd_obj, Lfdobj=1)
+acceleration <- eval.fd(grid, fd_obj, Lfdobj=2)
+
+# Step 3: FPCA
+fpca <- pca.fd(fd_obj, nharm=10)
+fpc_scores <- fpca$scores  # ← THESE ARE FDA FEATURES
+
+# Step 4: Use in model
+model <- glm(fraud ~ fpc_scores + scalars, family=binomial)
+
+
+PARAMETERS TO TUNE
+------------------
+
+1. n_basis: Number of basis functions (12-15 typical)
+2. lambda: Smoothing parameter (0.1-10 range)
+3. nharm: Number of PCs to keep (5-10 typical)
+4. grid_points: Evaluation points (52 for weekly)
+
+
+FDA FEATURE INTERPRETATION
+---------------------------
+
+When model says: fraud ~ 0.5*amt_PC1 + 0.8*amt_PC2 + 2.1*deriv_PC1
+
+   0.5*amt_PC1:   Higher overall spending → slight fraud risk
+   0.8*amt_PC2:   Increasing trend → moderate fraud risk  
+   2.1*deriv_PC1: Rapid changes → STRONG fraud signal!
+
+
+WHY FDA WORKS FOR FRAUD
+-----------------------
+
+1. Fraud = SUDDEN CHANGE in pattern
+   → FDA captures this via derivatives
+
+2. Fraud = ABNORMAL curve shape
+   → FDA captures this via FPCs
+
+3. Fraud = HIGH VOLATILITY
+   → FDA second derivative detects this
+
+4. Normal = SMOOTH consistent pattern
+   → FDA smoothing preserves signal, removes noise
+
+
+BOTTOM LINE
+-----------
+
+FDA converts "messy weekly transactions" into "smooth patterns + derivatives"
+Then extracts the ESSENCE (FPC scores) that best predict fraud.
+
+Result: 30 powerful features that capture:
+- Overall patterns (PCs of curves)
+- Rate of change (PCs of derivatives)  
+- Pattern breaks (acceleration)
+
+= Better fraud detection! 🎯
+
+================================================================================
+

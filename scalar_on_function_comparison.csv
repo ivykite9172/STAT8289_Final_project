@@ -1,0 +1,3 @@
+Model,AUC,Accuracy,Sensitivity,Specificity,Best_AUC,Best_Accuracy
+KDE,0.5123025123025123,0.22,1,0,FALSE,FALSE
+KME,0.5493395493395493,0.78,0,1,TRUE,TRUE

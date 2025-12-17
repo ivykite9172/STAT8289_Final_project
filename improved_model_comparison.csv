@@ -1,0 +1,3 @@
+Model,AUC,Features_Used,Features_Available
+Stepwise GLM,0.7686363636363637,20,50
+Random Forest,0.7093181818181818,50,50
